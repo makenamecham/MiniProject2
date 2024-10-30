@@ -1,0 +1,158 @@
+---
+title: "MiniProject2"
+format: html
+---
+
+```{r}
+library(readr)
+library(tidyverse)
+library(dplyr)
+library(MASS)
+library(arrow)
+library(caret)
+library(ggplot2)
+```
+
+```{r}
+getwd()
+df <- read_csv("admission.csv")
+```
+
+```{r}
+df$Group <- factor(df$Group, levels = c(1, 2, 3), 
+            labels = c("Admit", "Do Not Admit", "Borderline"))
+```
+
+```{r}
+index_test <- df %>%
+  group_by(Group) %>%
+  slice_tail(n = 5) %>%   
+  ungroup() %>%
+  row_number()
+
+# ^ This code is from ChatGPT
+
+test <- df[index_test, ]
+train <- df[-index_test, ]
+```
+
+```{r}
+# Scatterplot of GMAT against GPA, According to color of each group
+
+ggplot(train, aes(x = GPA, y = GMAT, color = Group)) +
+  geom_point() +
+  labs(title = "Scatter Plot of GMAT vs. GPA by Admission Group",
+       x = "GPA",
+       y = "GMAT") 
+```
+
+```{r}
+# Boxplots of GMAT scores arranged by group with differentiating colors
+
+ggplot(train, aes(x = Group, y = GMAT, fill = Group)) +
+  geom_boxplot() +
+  labs(title = "Boxplot of GMAT Scores by Admission Group",
+       x = "Admission Group",
+       y = "GMAT") 
+```
+
+```{r}
+# Boxplots of GPA arranged by group with differentiating colors
+
+ggplot(train, aes(x = Group, y = GPA, fill = Group)) +
+  geom_boxplot() +
+  labs(title = "Boxplot of GPA by Admission Group",
+       x = "Admission Group",
+       y = "GPA") 
+```
+
+These graphs are helpful predictors as they all confidently associate a higher GMAT score and GPA with a higher likelihood of getting admitted.
+
+```{r}
+method <- c('lda', 'qda')
+fam <- c(NA, NA)
+test_err = bal_ac = c()
+```
+
+```{r}
+library(MASS)
+
+for (i in 1:length(method)) {
+  fit <- train(Group ~ GPA + GMAT, data = train, method = method[i], 
+               family = fam[i])
+  Yhat <- predict(fit, test, type = 'raw')
+  
+  # Convert Yhat to a factor, ensuring levels match test$Group - ChatGPT
+  Yhat <- factor(Yhat, levels = levels(test$Group)) 
+
+  # Ensure the reference (test$Group) is also a factor - ChatGPT
+  ref_group <- factor(test$Group, levels = levels(test$Group))
+
+  # Compute confusion matrix and test error rate
+  conf_mat <- confusionMatrix(Yhat, ref_group)
+  test_err[i] <- 1 - conf_mat$overall['Accuracy']
+}
+```
+
+```{r}
+print(test_err)
+```
+
+The error rate for LDA is 20%, whereas the error rate for for QDA is approximately 6.67%. This means that the LDA model misclassified approximately 20% of the test data points when predicting group, and that value was 6.67% for QDA. We would recommend the QDA model in this case. It has a significantly lower error rate when compared to LDA. The QDA model is able to fit in a more flexible manner, utilizing the separate covariance matrices for each class, so it provides a closer fit compared to the LDA model.
+
+```{r}
+getwd()
+df2 <- read_csv("bankruptcy.csv")
+```
+
+```{r}
+summary(df2)
+```
+
+```{r}
+head(df2)
+```
+
+```{r}
+colnames(df2)
+```
+
+```{r}
+df2 <- subset(df2, select = -c(...6, ...7))
+```
+
+```{r}
+colnames(df2)
+```
+
+```{r}
+df2 <- df2 %>% filter(!is.na(Group))
+```
+
+```{r}
+df2 <- na.omit(df2)
+```
+
+```{r}
+df2$Group <- factor(df2$Group, levels = c(0, 1), labels = c("+", "-"))
+```
+
+```{r}
+full_model <- glm(Group ~ X1 + X2 + X3 + X4, data=df2, family = binomial)
+summary(full_model)
+
+```
+
+Via Backwards Elimination: Remove largest P-value - remove X2 feature
+
+```{r}
+reduced_model_1 <- glm(Group ~ X1 + X3 + X4, data=df2, family = binomial)
+summary(reduced_model_1)
+```
+
+Via Backwards Elimination: Remove largest P-value - remove X4 feature
+
+```{r}
+reduced_model_2 <- glm(Group ~ X1 + X3, data=df2, family = binomial)
+summary(reduced_model_2)
+```
