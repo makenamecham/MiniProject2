@@ -107,5 +107,5 @@ test_predictions
 {r}
 # generate a confusion matrix
 test_predictions %>% 
-  conf_mat(truth = 1, estimate = .pred_class)
+  conf_mat(truth = DEATH_EVENT, estimate = .pred_class)
 
