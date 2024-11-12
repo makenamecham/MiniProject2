@@ -1,19 +1,20 @@
 ---
 title: "MiniProject3"
-author: "Tyson Hyland, Makena Mechan"
+author: "Tyson Hyland, Makena Mecham"
 format: html
 ---
 
-{r}
+```{r}
 library(tidymodels)
 library(tidyverse)
 library(workflows)
 library(tune)
 library(mlbench)
+```
 
-a. Split the data into training and test sets
+## a. Split the data into `training` and `test` sets
 
-{r}
+```{r}
 heart_data <- read_csv('./data/heart_failure_clinical_records_dataset.csv')
 heart_data$DEATH_EVENT <- as.factor(heart_data$DEATH_EVENT) # Convert the response to a factor to work in the rf model later
 # any(is.na(heart_data)) # A check for NA values reveals there are none in the data
@@ -22,25 +23,28 @@ heart_split <- initial_split(heart_data, strata = DEATH_EVENT, prop = 4/5) # Spl
 train <- training(heart_split) # Training data
 test <- testing(heart_split) # Testing data
 heart_cv <- vfold_cv(train) # Crossvalidation fold
+```
 
-b. Build a recipe using the recipe() function and the step_*() functions
+## b. Build a recipe using the recipe() function and the step\_\*() functions
 
-{r}
+```{r}
 heart_recipe <- recipe(DEATH_EVENT ~ ., data=heart_data) %>%
   step_normalize(all_numeric()) %>%
   step_impute_knn(all_predictors())
 
 # heart_recipe
+```
 
-{r}
+```{r}
 heart_process <- heart_recipe %>%
   prep(train) %>%
   juice()
 # heart_process
+```
 
-c. Specify the model using the rand_forest() and set_engine functions.
+## c. Specify the model using the rand_forest() and set_engine functions.
 
-{r}
+```{r}
 rf_model <- 
   # specify that the model is a random forest
   rand_forest() %>%
@@ -50,18 +54,20 @@ rf_model <-
   set_engine("ranger", importance = "impurity") %>%
   # choose either the continuous regression or binary classification mode
   set_mode("classification") 
+```
 
-d. Create a workflow and add the recipe.
+## d. Create a workflow and add the recipe.
 
-{r}
+```{r}
 rf_workflow <- workflow() %>% 
   add_recipe(heart_recipe) %>% 
   add_model(rf_model)
 # rf_workflow
+```
 
-e. Tune the model using tune_grid() to find the optimal value of the tuning parameter mtry (the number of randomly selected predictors at each split) using 5-fold CV, where mtry varies over 1, 5, 9, ... , 𝑝. Choose the best value using select_best().
+## e. Tune the model using tune_grid() to find the optimal value of the tuning parameter mtry (the number of randomly selected predictors at each split) using 5-fold CV, where mtry varies over 1, 5, 9, ... , 𝑝. Choose the best value using select_best().
 
-{r}
+```{r}
 doParallel::registerDoParallel()
 set.seed(123)
 
@@ -80,15 +86,17 @@ rf_tune_results <- rf_workflow %>%
 param_final <- rf_tune_results %>% 
   select_best(metric='roc_auc')
 # param_final
+```
 
-f. Evaluate the performance of your final model using the finalize_workflow function and add_model on the test set and report the optimal value of mtry, the confusion matrix and the misclassification error rate. Use set.seed(123) for reproducibility of your results.
+## f. Evaluate the performance of your final model using the finalize_workflow function and add_model on the test set and report the optimal value of mtry, the confusion matrix and the misclassification error rate. Use set.seed(123) for reproducibility of your results.
 
-{r}
+```{r}
 # Finalize the workflow
 rf_workflow <- rf_workflow %>%
   finalize_workflow(param_final)
+```
 
-{r}
+```{r}
 # Fit the workflow to a model and test/train on the split data
 rf_fit <- rf_workflow %>%
   # fit on the training set and evaluate on test set
@@ -98,14 +106,66 @@ rf_fit <- rf_workflow %>%
 
 test_performance <- rf_fit %>% collect_metrics()
 test_performance
+```
 
-{r}
+```{r}
+ranger_obj <- extract_fit_parsnip(rf_fit)$fit
+ranger_obj
+```
+
+```{r}
+# Convert variable importance to a data frame
+importance_df <- as.data.frame(ranger_obj$variable.importance) %>%
+  tibble::rownames_to_column("Variable") %>%  # Add variable names as a column
+  dplyr::rename(Importance = `ranger_obj$variable.importance`) %>%  # Rename the importance column
+  dplyr::arrange(desc(Importance))  # Sort by importance, if desired
+
+# Print the formatted data frame
+print(importance_df)
+```
+
+```{r}
 # generate predictions from the test set
 test_predictions <- rf_fit %>% collect_predictions()
 test_predictions
+```
 
-{r}
+```{r}
 # generate a confusion matrix
 test_predictions %>% 
   conf_mat(truth = DEATH_EVENT, estimate = .pred_class)
+```
 
+Here, the mtry value in our final model is 1. The accuracy is 83.6%, and the roc accuracy is 94.6%. The misclassification error rate is 10/61 = 16.4%.
+
+## g. Plot the ROC curve.
+
+```{r}
+
+```
+
+## h. Plot the important variables
+
+```{r}
+# Convert variable importance to a data frame
+importance_df <- as.data.frame(ranger_obj$variable.importance) %>%
+  tibble::rownames_to_column("Variable") %>%  # Add variable names as a column
+  dplyr::rename(Importance = `ranger_obj$variable.importance`) %>%  # Rename the importance column
+  dplyr::arrange(desc(Importance))  # Sort by importance, if desired
+
+# Print the formatted data frame
+print(importance_df)
+```
+
+```{r}
+# Assuming your dataframe is named importance_df
+ggplot(importance_df, aes(x = reorder(Variable, Importance), y = Importance)) +
+  geom_col(fill = "steelblue") +  # Bar plot with custom color
+  coord_flip() +  # Flip coordinates for easier readability
+  labs(
+    title = "Variable Importance",
+    x = "Variable",
+    y = "Importance"
+  ) +
+  theme_minimal()
+```
