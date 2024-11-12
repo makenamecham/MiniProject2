@@ -1,0 +1,111 @@
+---
+title: "MiniProject3"
+author: "Tyson Hyland, Makena Mechan"
+format: html
+---
+
+{r}
+library(tidymodels)
+library(tidyverse)
+library(workflows)
+library(tune)
+library(mlbench)
+
+a. Split the data into training and test sets
+
+{r}
+heart_data <- read_csv('./data/heart_failure_clinical_records_dataset.csv')
+heart_data$DEATH_EVENT <- as.factor(heart_data$DEATH_EVENT) # Convert the response to a factor to work in the rf model later
+# any(is.na(heart_data)) # A check for NA values reveals there are none in the data
+set.seed(123) # Maintain a consistent seed
+heart_split <- initial_split(heart_data, strata = DEATH_EVENT, prop = 4/5) # Split the data into training and testing sets
+train <- training(heart_split) # Training data
+test <- testing(heart_split) # Testing data
+heart_cv <- vfold_cv(train) # Crossvalidation fold
+
+b. Build a recipe using the recipe() function and the step_*() functions
+
+{r}
+heart_recipe <- recipe(DEATH_EVENT ~ ., data=heart_data) %>%
+  step_normalize(all_numeric()) %>%
+  step_impute_knn(all_predictors())
+
+# heart_recipe
+
+{r}
+heart_process <- heart_recipe %>%
+  prep(train) %>%
+  juice()
+# heart_process
+
+c. Specify the model using the rand_forest() and set_engine functions.
+
+{r}
+rf_model <- 
+  # specify that the model is a random forest
+  rand_forest() %>%
+  # specify that the `mtry` parameter needs to be tuned
+  set_args(mtry = tune(),trees = tune(),) %>%
+  # select the engine/package that underlies the model
+  set_engine("ranger", importance = "impurity") %>%
+  # choose either the continuous regression or binary classification mode
+  set_mode("classification") 
+
+d. Create a workflow and add the recipe.
+
+{r}
+rf_workflow <- workflow() %>% 
+  add_recipe(heart_recipe) %>% 
+  add_model(rf_model)
+# rf_workflow
+
+e. Tune the model using tune_grid() to find the optimal value of the tuning parameter mtry (the number of randomly selected predictors at each split) using 5-fold CV, where mtry varies over 1, 5, 9, ... , 𝑝. Choose the best value using select_best().
+
+{r}
+doParallel::registerDoParallel()
+set.seed(123)
+
+p <- ncol(heart_data) - 1
+
+rf_grid <- expand_grid(mtry = seq(1, p, by = 4), trees = c(100, 500)) # Passing values 
+# extract results
+rf_tune_results <- rf_workflow %>%
+  tune_grid(resamples = heart_cv, #CV object
+            grid = rf_grid, # grid of values to try
+            metrics = metric_set(accuracy, roc_auc) # metrics we care about
+            )
+
+# rf_tune_results %>% collect_metrics()
+
+param_final <- rf_tune_results %>% 
+  select_best(metric='roc_auc')
+# param_final
+
+f. Evaluate the performance of your final model using the finalize_workflow function and add_model on the test set and report the optimal value of mtry, the confusion matrix and the misclassification error rate. Use set.seed(123) for reproducibility of your results.
+
+{r}
+# Finalize the workflow
+rf_workflow <- rf_workflow %>%
+  finalize_workflow(param_final)
+
+{r}
+# Fit the workflow to a model and test/train on the split data
+rf_fit <- rf_workflow %>%
+  # fit on the training set and evaluate on test set
+  last_fit(heart_split)
+
+#TODO extract the value of mtry() from this model
+
+test_performance <- rf_fit %>% collect_metrics()
+test_performance
+
+{r}
+# generate predictions from the test set
+test_predictions <- rf_fit %>% collect_predictions()
+test_predictions
+
+{r}
+# generate a confusion matrix
+test_predictions %>% 
+  conf_mat(truth = 1, estimate = .pred_class)
+
