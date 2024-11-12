@@ -1,0 +1,118 @@
+---
+title: "Mini_Project3"
+format: html
+---
+
+```{r}
+library(tidymodels)
+library(tidyverse)
+library(tune)
+library(workflows)
+library(mlbench)
+```
+
+```{r}
+df_raw <- read_csv("heart_failure_clinical_records_dataset.csv")
+```
+
+```{r}
+glimpse(df_raw)
+```
+
+```{r}
+head(df_raw)
+```
+
+```{r}
+colnames(df_raw)
+```
+
+```{r}
+df <- df_raw %>%
+  mutate_at(vars(creatinine_phosphokinase, ejection_fraction, platelets, serum_creatinine, serum_sodium),
+            ~ if_else(. == 0, as.numeric(NA), .)) %>%
+  mutate(DEATH_EVENT = as.factor(DEATH_EVENT))
+
+head(df)
+```
+
+```{r}
+set.seed(1)
+dia_split <- initial_split(df, strata = DEATH_EVENT, prop = 3/4)
+dia_split
+```
+
+```{r}
+train <- training(dia_split)
+test <- testing(dia_split)
+test
+```
+
+```{r}
+dia_cv <-vfold_cv(train)
+```
+
+```{r}
+dia_reci <- recipe(DEATH_EVENT ~., data=df) %>% 
+  step_normalize(all_numeric()) %>% 
+  step_impute_knn(all_predictors()) # Fill in missing values 
+  dia_reci
+```
+
+```{r}
+dia_process <- dia_reci %>% 
+  prep(train) %>% 
+  juice()
+dia_process
+```
+
+```{r}
+rf <- rand_forest() %>% 
+  set_args(mtry=tune(), trees=tune()) %>% 
+  set_engine("ranger", importance="impurity") %>% 
+  set_mode("classification")
+rf
+```
+
+```{r}
+rf_wf <- workflow() %>% 
+  add_recipe(dia_reci) %>% 
+  add_model(rf)
+rf_wf
+```
+
+```{r}
+set.seed(2)
+
+p <- ncol(df) - 1
+
+rf_grid <- expand_grid(mtry = seq(1, p, by = 4), trees = c(100, 500)) # Passing values 
+
+rf_tune <- rf_wf %>%
+  tune_grid(
+    resamples = dia_cv, 
+    grid = rf_grid,
+    metrics = metric_set(accuracy, roc_auc)
+  )
+
+rf_tune
+```
+
+```{r}
+rf_tune %>%  
+  collect_metrics() %>% 
+  filter(.metric=='roc_auc')
+```
+
+```{r}
+param_final <- rf_tune %>% select_best(metric='roc_auc')
+param_final
+```
+
+```{r}
+set.seed(123)
+
+rf_final_wf <- rf_wf %>% finalize_workflow(param_final)
+rf_final_wf
+
+```
