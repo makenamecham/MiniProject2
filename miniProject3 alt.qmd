@@ -102,8 +102,6 @@ rf_fit <- rf_workflow %>%
   # fit on the training set and evaluate on test set
   last_fit(heart_split)
 
-#TODO extract the value of mtry() from this model
-
 test_performance <- rf_fit %>% collect_metrics()
 test_performance
 ```
@@ -141,7 +139,11 @@ Here, the mtry value in our final model is 1. The accuracy is 83.6%, and the roc
 ## g. Plot the ROC curve.
 
 ```{r}
+roc_data <- test_predictions %>%
+  roc_curve(truth = DEATH_EVENT, .pred_1)
 
+autoplot(roc_data) +
+  labs(title = "ROC Curve", x = "1 - Specificity", y = "Sensitivity")
 ```
 
 ## h. Plot the important variables
@@ -169,3 +171,21 @@ ggplot(importance_df, aes(x = reorder(Variable, Importance), y = Importance)) +
   ) +
   theme_minimal()
 ```
+
+## Discussion Questions
+
+-   What do I believe I did well on this assignment?
+
+    -   I think we did well following the steps of making a recipe and workflow to create a final model from the data.
+
+-   What was the most challenging part of this assignment?
+
+    -   It was challenging plotting the ROC curve. We hadn't gone over this in class or in the TidyModel.qmd file, so some independent research was required to complete this task.
+
+-   What would have made this assignment a better experience?
+
+    -   It would have been nice to have a tutorial on creating the ROC and Variable Importance plots to reference for the last two bullet points of the assignment.
+
+-   What do I need help with?
+
+    -   I would like to review in class what 'variable importance' means exactly.
